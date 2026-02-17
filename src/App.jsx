@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "./supabase";
 
 // ─── Colors ────────────────────────────────────────────────────────────────
 const C = {
@@ -45,8 +46,104 @@ const Overlay = ({ children, show }) => {
   );
 };
 
-// ─── App ──────────────────────────────────────────────────────────────────
-export default function App() {
+// ─── Auth Screen ──────────────────────────────────────────────────────────
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [checkEmail, setCheckEmail] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    if (mode === "signup") {
+      const { error } = await supabase.auth.signUp({ email, password });
+      setLoading(false);
+      if (error) { setError(error.message); return; }
+      setCheckEmail(true);
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (error) { setError(error.message); return; }
+      onAuth(data.user);
+    }
+  };
+
+  if (checkEmail) {
+    return (
+      <div style={{ maxWidth: 400, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
+        <h1 style={{ color: C.amber, fontSize: 28, fontWeight: 900, letterSpacing: 2, marginBottom: 8 }}>SOVEREIGN SELF™</h1>
+        <Card>
+          <p style={{ fontSize: 18, fontWeight: 700, color: C.green, marginBottom: 12 }}>Check your email!</p>
+          <p style={{ color: C.sub, fontSize: 14, lineHeight: 1.6 }}>
+            We sent a confirmation link to <strong style={{ color: C.text }}>{email}</strong>. Click it to activate your account, then come back and log in.
+          </p>
+        </Card>
+        <button onClick={() => { setCheckEmail(false); setMode("login"); }}
+          style={{ background: "transparent", border: "none", color: C.teal, fontSize: 14, cursor: "pointer", marginTop: 16 }}>
+          Back to login
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 400, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
+      <h1 style={{ color: C.amber, fontSize: 28, fontWeight: 900, letterSpacing: 2, marginBottom: 4 }}>SOVEREIGN SELF™</h1>
+      <p style={{ color: C.sub, fontSize: 13, marginBottom: 32 }}>Command Center</p>
+
+      <Card>
+        <div style={{ display: "flex", marginBottom: 20, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.cardBorder}` }}>
+          <button onClick={() => { setMode("login"); setError(""); }}
+            style={{ flex: 1, padding: "10px", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer",
+              background: mode === "login" ? C.green : "transparent", color: mode === "login" ? "#000" : C.sub }}>
+            Log In
+          </button>
+          <button onClick={() => { setMode("signup"); setError(""); }}
+            style={{ flex: 1, padding: "10px", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer",
+              background: mode === "signup" ? C.teal : "transparent", color: mode === "signup" ? "#000" : C.sub }}>
+            Sign Up
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <input
+            type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
+            required autoComplete="email"
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.cardBorder}`,
+              background: "#111827", color: C.text, fontSize: 15, marginBottom: 10, outline: "none"
+            }}
+          />
+          <input
+            type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min 6 characters)"
+            required minLength={6} autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            style={{
+              width: "100%", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.cardBorder}`,
+              background: "#111827", color: C.text, fontSize: 15, marginBottom: 16, outline: "none"
+            }}
+          />
+          {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
+          <Btn
+            label={loading ? "..." : mode === "login" ? "Log In" : "Create Account"}
+            color={mode === "login" ? C.green : C.teal}
+            onClick={() => {}} // form handles submit
+            style={{ opacity: loading ? 0.6 : 1 }}
+          />
+        </form>
+      </Card>
+
+      <p style={{ color: C.sub, fontSize: 11, marginTop: 24, opacity: 0.5 }}>Your data stays yours. Always.</p>
+    </div>
+  );
+}
+
+// ─── Main App (Dashboard) ─────────────────────────────────────────────────
+function Dashboard({ user, onLogout }) {
   const [voltage, setVoltage] = useState(null);
   const [mission, setMission] = useState("");
   const [missionInput, setMissionInput] = useState("");
@@ -62,10 +159,12 @@ export default function App() {
   const [showStuck, setShowStuck] = useState(false);
   const [stuckStep, setStuckStep] = useState(0);
 
+  const storageKey = `sovereign_demo_${user.id}`;
+
   // Load persisted state
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("sovereign_demo") || "{}");
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
       if (saved.voltage) { setVoltage(saved.voltage); setShowLaunch(false); }
       if (saved.mission) { setMission(saved.mission); setMissionLocked(true); }
     } catch { /* ignore */ }
@@ -74,7 +173,7 @@ export default function App() {
   // Save state
   useEffect(() => {
     if (voltage) {
-      localStorage.setItem("sovereign_demo", JSON.stringify({ voltage, mission }));
+      localStorage.setItem(storageKey, JSON.stringify({ voltage, mission }));
     }
   }, [voltage, mission]);
 
@@ -111,7 +210,7 @@ export default function App() {
   };
 
   const resetDay = () => {
-    localStorage.removeItem("sovereign_demo");
+    localStorage.removeItem(storageKey);
     setVoltage(null); setMission(""); setMissionInput(""); setMissionLocked(false);
     setShowLaunch(true); setLaunchStep("voltage");
     setSprintSeconds(null); setSprintActive(false); setSprintDone(false);
@@ -207,8 +306,15 @@ export default function App() {
 
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button onClick={onLogout}
+            style={{ background: "transparent", border: `1px solid ${C.cardBorder}`, color: C.sub, padding: "4px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer" }}>
+            Log out
+          </button>
+        </div>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Sovereign Self™</h1>
         <p style={{ color: C.sub, fontSize: 13 }}>Command Center</p>
+        <p style={{ color: C.sub, fontSize: 11, marginTop: 2 }}>{user.email}</p>
         {voltage && <p style={{ color: modeColor, fontSize: 12, fontWeight: 700, letterSpacing: 1, marginTop: 4 }}>● {modeLabel}</p>}
       </div>
 
@@ -323,4 +429,44 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+// ─── Root App (Auth wrapper) ──────────────────────────────────────────────
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
+        <p style={{ color: C.sub, fontSize: 14 }}>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen onAuth={setUser} />;
+  }
+
+  return <Dashboard user={user} onLogout={handleLogout} />;
 }

@@ -48,30 +48,62 @@ const Overlay = ({ children, show }) => {
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [mode, setMode] = useState("login"); // "login" | "signup" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
+    if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      setLoading(false);
+      if (error) { setError(error.message); return; }
+      setResetSent(true);
+      speak("Password reset email sent. Check your inbox.");
+      return;
+    }
+
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({ email, password });
       setLoading(false);
-      if (error) { setError(error.message); return; }
+      if (error) { setError(error.message); speak("Sign up failed. " + error.message); return; }
       setCheckEmail(true);
+      speak("Account created. Check your email to confirm.");
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       setLoading(false);
-      if (error) { setError(error.message); return; }
+      if (error) { setError(error.message); speak("Login failed. Check your credentials."); return; }
+      speak("Welcome back. Let's get to work.");
       onAuth(data.user);
     }
   };
+
+  if (resetSent) {
+    return (
+      <div style={{ maxWidth: 400, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
+        <h1 style={{ color: C.amber, fontSize: 28, fontWeight: 900, letterSpacing: 2, marginBottom: 8 }}>SOVEREIGN SELF™</h1>
+        <Card>
+          <p style={{ fontSize: 18, fontWeight: 700, color: C.teal, marginBottom: 12 }}>Reset link sent!</p>
+          <p style={{ color: C.sub, fontSize: 14, lineHeight: 1.6 }}>
+            Check your inbox at <strong style={{ color: C.text }}>{email}</strong>. Click the link to set a new password.
+          </p>
+        </Card>
+        <button onClick={() => { setResetSent(false); setMode("login"); }}
+          style={{ background: "transparent", border: "none", color: C.teal, fontSize: 14, cursor: "pointer", marginTop: 16 }}>
+          Back to login
+        </button>
+      </div>
+    );
+  }
 
   if (checkEmail) {
     return (
@@ -97,18 +129,22 @@ function AuthScreen({ onAuth }) {
       <p style={{ color: C.sub, fontSize: 13, marginBottom: 32 }}>Command Center</p>
 
       <Card>
-        <div style={{ display: "flex", marginBottom: 20, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.cardBorder}` }}>
-          <button onClick={() => { setMode("login"); setError(""); }}
-            style={{ flex: 1, padding: "10px", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer",
-              background: mode === "login" ? C.green : "transparent", color: mode === "login" ? "#000" : C.sub }}>
-            Log In
-          </button>
-          <button onClick={() => { setMode("signup"); setError(""); }}
-            style={{ flex: 1, padding: "10px", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer",
-              background: mode === "signup" ? C.teal : "transparent", color: mode === "signup" ? "#000" : C.sub }}>
-            Sign Up
-          </button>
-        </div>
+        {mode !== "forgot" ? (
+          <div style={{ display: "flex", marginBottom: 20, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.cardBorder}` }}>
+            <button onClick={() => { setMode("login"); setError(""); }}
+              style={{ flex: 1, padding: "10px", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                background: mode === "login" ? C.green : "transparent", color: mode === "login" ? "#000" : C.sub }}>
+              Log In
+            </button>
+            <button onClick={() => { setMode("signup"); setError(""); }}
+              style={{ flex: 1, padding: "10px", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                background: mode === "signup" ? C.teal : "transparent", color: mode === "signup" ? "#000" : C.sub }}>
+              Sign Up
+            </button>
+          </div>
+        ) : (
+          <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 16, color: C.text }}>Reset Password</p>
+        )}
 
         <form onSubmit={handleSubmit}>
           <input
@@ -119,22 +155,37 @@ function AuthScreen({ onAuth }) {
               background: "#111827", color: C.text, fontSize: 15, marginBottom: 10, outline: "none"
             }}
           />
-          <input
-            type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min 6 characters)"
-            required minLength={6} autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            style={{
-              width: "100%", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.cardBorder}`,
-              background: "#111827", color: C.text, fontSize: 15, marginBottom: 16, outline: "none"
-            }}
-          />
+          {mode !== "forgot" && (
+            <input
+              type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (min 6 characters)"
+              required minLength={6} autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.cardBorder}`,
+                background: "#111827", color: C.text, fontSize: 15, marginBottom: 16, outline: "none"
+              }}
+            />
+          )}
           {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</p>}
           <Btn
-            label={loading ? "..." : mode === "login" ? "Log In" : "Create Account"}
-            color={mode === "login" ? C.green : C.teal}
-            onClick={() => {}} // form handles submit
+            label={loading ? "..." : mode === "forgot" ? "Send Reset Link" : mode === "login" ? "Log In" : "Create Account"}
+            color={mode === "forgot" ? C.amber : mode === "login" ? C.green : C.teal}
+            onClick={() => {}}
             style={{ opacity: loading ? 0.6 : 1 }}
           />
         </form>
+
+        {mode === "login" && (
+          <button onClick={() => { setMode("forgot"); setError(""); }}
+            style={{ background: "transparent", border: "none", color: C.sub, fontSize: 12, cursor: "pointer", marginTop: 12 }}>
+            Forgot password?
+          </button>
+        )}
+        {mode === "forgot" && (
+          <button onClick={() => { setMode("login"); setError(""); }}
+            style={{ background: "transparent", border: "none", color: C.teal, fontSize: 12, cursor: "pointer", marginTop: 12 }}>
+            Back to login
+          </button>
+        )}
       </Card>
 
       <p style={{ color: C.sub, fontSize: 11, marginTop: 24, opacity: 0.5 }}>Your data stays yours. Always.</p>
